@@ -1,25 +1,42 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+    KeyboardAvoidingView,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { crearMateria, ordenarMaterias, type Materia } from '@/domain/materias';
-import { guardarMaterias, leerMaterias } from '@/storage/materias';
+import {
+    crearMateria,
+    ordenarMaterias,
+    procesarNotaSegundoBimestre,
+    type Materia,
+} from "@/domain/materias";
+import { guardarMaterias, leerMaterias } from "@/storage/materias";
+
+type ResultadoSemestre = {
+  error?: string;
+  estado?: string;
+  notaMinima?: number;
+};
 
 export default function HomeScreen() {
-  const [nombre, setNombre] = useState('');
-  const [nota, setNota] = useState('');
-  const [nombreError, setNombreError] = useState('');
-  const [notaError, setNotaError] = useState('');
+  const [nombre, setNombre] = useState("");
+  const [nota, setNota] = useState("");
+  const [nombreError, setNombreError] = useState("");
+  const [notaError, setNotaError] = useState("");
   const [materias, setMaterias] = useState<Materia[]>([]);
+  const [segundoBimestrePorMateria, setSegundoBimestrePorMateria] = useState<
+    Record<string, string>
+  >({});
+  const [resultadoPorMateria, setResultadoPorMateria] = useState<
+    Record<string, ResultadoSemestre>
+  >({});
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -44,24 +61,66 @@ export default function HomeScreen() {
     const resultado = crearMateria(nombre, nota, materias);
 
     if (!resultado.ok) {
-      setNombreError(resultado.error === 'Escribe el nombre de la materia.' || resultado.error === 'Ya tienes una materia con ese nombre.' ? resultado.error : '');
-      setNotaError(resultado.error === 'Escribe una nota entre 0 y 20 con hasta dos decimales.' ? resultado.error : '');
+      setNombreError(
+        resultado.error === "Escribe el nombre de la materia." ||
+          resultado.error === "Ya tienes una materia con ese nombre."
+          ? resultado.error
+          : "",
+      );
+      setNotaError(
+        resultado.error ===
+          "Escribe una nota entre 0 y 20 con hasta dos decimales."
+          ? resultado.error
+          : "",
+      );
       return;
     }
 
-    const materasActualizadas = ordenarMaterias([...materias, resultado.materia]);
+    const materasActualizadas = ordenarMaterias([
+      ...materias,
+      resultado.materia,
+    ]);
     setMaterias(materasActualizadas);
-    setNombre('');
-    setNota('');
-    setNombreError('');
-    setNotaError('');
+    setNombre("");
+    setNota("");
+    setNombreError("");
+    setNotaError("");
     await guardarMaterias(materasActualizadas);
+  };
+
+  const actualizarNotaSegundoBimestre = (materia: Materia, valor: string) => {
+    setSegundoBimestrePorMateria((anterior) => ({
+      ...anterior,
+      [materia.id]: valor,
+    }));
+
+    const resultado = procesarNotaSegundoBimestre(
+      materia.nota,
+      valor,
+      resultadoPorMateria[materia.id],
+    );
+
+    if ("error" in resultado) {
+      setResultadoPorMateria((anterior) => ({
+        ...anterior,
+        [materia.id]: { error: resultado.error },
+      }));
+      return;
+    }
+
+    setResultadoPorMateria((anterior) => ({
+      ...anterior,
+      [materia.id]: {
+        estado: resultado.estado,
+        notaMinima: resultado.notaMinima,
+      },
+    }));
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.container}
       >
         <ScrollView
@@ -71,7 +130,9 @@ export default function HomeScreen() {
         >
           <View style={styles.header}>
             <Text style={styles.title}>Materias</Text>
-            <Text style={styles.subtitle}>Registra la nota del primer bimestre.</Text>
+            <Text style={styles.subtitle}>
+              Registra la nota del primer bimestre.
+            </Text>
           </View>
 
           <View style={styles.formCard}>
@@ -81,7 +142,7 @@ export default function HomeScreen() {
               onChangeText={(value) => {
                 setNombre(value);
                 if (nombreError) {
-                  setNombreError('');
+                  setNombreError("");
                 }
               }}
               placeholder="Ej: Álgebra"
@@ -91,7 +152,9 @@ export default function HomeScreen() {
               style={[styles.input, nombreError ? styles.inputError : null]}
               accessibilityLabel="Nombre de la materia"
             />
-            {nombreError ? <Text style={styles.errorText}>{nombreError}</Text> : null}
+            {nombreError ? (
+              <Text style={styles.errorText}>{nombreError}</Text>
+            ) : null}
 
             <Text style={styles.label}>Nota del primer bimestre</Text>
             <TextInput
@@ -99,7 +162,7 @@ export default function HomeScreen() {
               onChangeText={(value) => {
                 setNota(value);
                 if (notaError) {
-                  setNotaError('');
+                  setNotaError("");
                 }
               }}
               placeholder="Ej: 9.5"
@@ -108,7 +171,9 @@ export default function HomeScreen() {
               style={[styles.input, notaError ? styles.inputError : null]}
               accessibilityLabel="Nota del primer bimestre"
             />
-            {notaError ? <Text style={styles.errorText}>{notaError}</Text> : null}
+            {notaError ? (
+              <Text style={styles.errorText}>{notaError}</Text>
+            ) : null}
 
             <Pressable
               onPress={handleGuardar}
@@ -126,14 +191,51 @@ export default function HomeScreen() {
             {isLoading ? (
               <Text style={styles.emptyState}>Cargando materias...</Text>
             ) : materias.length === 0 ? (
-              <Text style={styles.emptyState}>Aún no hay materias registradas.</Text>
+              <Text style={styles.emptyState}>
+                Aún no hay materias registradas.
+              </Text>
             ) : (
-              materias.map((materia) => (
-                <View key={materia.id} style={styles.listRow}>
-                  <Text style={styles.itemName}>{materia.nombre}</Text>
-                  <Text style={styles.itemNota}>{materia.nota}</Text>
-                </View>
-              ))
+              materias.map((materia) => {
+                const resultado = resultadoPorMateria[materia.id];
+                const notaSegundoBimestre =
+                  segundoBimestrePorMateria[materia.id] ?? "";
+
+                return (
+                  <View key={materia.id} style={styles.materiaCard}>
+                    <View style={styles.listRow}>
+                      <Text style={styles.itemName}>{materia.nombre}</Text>
+                      <Text style={styles.itemNota}>{materia.nota}</Text>
+                    </View>
+
+                    <Text style={styles.label}>Nota del segundo bimestre</Text>
+                    <TextInput
+                      value={notaSegundoBimestre}
+                      onChangeText={(valor) =>
+                        actualizarNotaSegundoBimestre(materia, valor)
+                      }
+                      placeholder="Ej: 9.5"
+                      placeholderTextColor="#7a7d84"
+                      keyboardType="decimal-pad"
+                      style={[
+                        styles.input,
+                        resultado?.error ? styles.inputError : null,
+                      ]}
+                      accessibilityLabel={`Nota del segundo bimestre de ${materia.nombre}`}
+                    />
+
+                    {resultado?.error ? (
+                      <Text style={styles.errorText}>{resultado.error}</Text>
+                    ) : resultado?.estado ? (
+                      <Text style={styles.resultadoTexto}>
+                        {resultado.estado}
+                        {resultado.notaMinima !== undefined
+                          ? ` — necesitas ${resultado.notaMinima.toFixed(2)} para aprobar`
+                          : ""}
+                      </Text>
+                    ) : null}
+                  </View>
+                );
+              })
             )}
           </View>
         </ScrollView>
@@ -145,7 +247,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#e2e4e9',
+    backgroundColor: "#e2e4e9",
   },
   container: {
     flex: 1,
@@ -157,111 +259,123 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
   header: {
-    backgroundColor: '#001F3F',
+    backgroundColor: "#001F3F",
     borderRadius: 18,
     paddingHorizontal: 20,
     paddingVertical: 20,
     marginBottom: 18,
   },
   title: {
-    color: '#ffffff',
+    color: "#ffffff",
     fontSize: 28,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   subtitle: {
-    color: '#dfe8f5',
+    color: "#dfe8f5",
     fontSize: 14,
     marginTop: 6,
   },
   formCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     borderRadius: 18,
     padding: 20,
     marginBottom: 18,
-    shadowColor: '#000000',
+    shadowColor: "#000000",
     shadowOpacity: 0.05,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
   label: {
-    color: '#111111',
+    color: "#111111",
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 8,
   },
   input: {
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: '#dce0e8',
+    borderColor: "#dce0e8",
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
-    color: '#111111',
+    color: "#111111",
     marginBottom: 16,
   },
   inputError: {
-    borderColor: '#b42318',
+    borderColor: "#b42318",
   },
   errorText: {
-    color: '#b42318',
+    color: "#b42318",
     fontSize: 13,
     marginTop: -10,
     marginBottom: 12,
   },
   button: {
-    backgroundColor: '#357ca5',
+    backgroundColor: "#357ca5",
     borderRadius: 12,
     paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     minHeight: 48,
   },
   buttonText: {
-    color: '#ffffff',
-    fontWeight: '700',
+    color: "#ffffff",
+    fontWeight: "700",
     fontSize: 16,
   },
   listCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     borderRadius: 18,
     padding: 20,
-    shadowColor: '#000000',
+    shadowColor: "#000000",
     shadowOpacity: 0.05,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
   listTitle: {
-    color: '#111111',
+    color: "#111111",
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: "700",
     marginBottom: 12,
   },
   emptyState: {
-    color: '#5f6368',
+    color: "#5f6368",
     fontSize: 14,
     paddingVertical: 8,
   },
   listRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#edf0f4',
+    borderBottomColor: "#edf0f4",
+  },
+  materiaCard: {
+    borderTopWidth: 1,
+    borderTopColor: "#edf0f4",
+    paddingTop: 12,
+    marginTop: 12,
   },
   itemName: {
-    color: '#111111',
+    color: "#111111",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     flex: 1,
     marginRight: 12,
   },
   itemNota: {
-    color: '#001F3F',
-    fontWeight: '700',
+    color: "#001F3F",
+    fontWeight: "700",
     fontSize: 15,
+  },
+  resultadoTexto: {
+    color: "#001F3F",
+    fontWeight: "700",
+    fontSize: 14,
+    marginTop: 8,
   },
 });
